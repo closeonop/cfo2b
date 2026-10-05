@@ -4,6 +4,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.validation.FieldError;
@@ -49,6 +50,12 @@ public class GlobalExceptionHandler {
             fields.putIfAbsent(fe.getField(), fe.getDefaultMessage());
         }
         return ResponseEntity.badRequest().body(new ErrorResponse("Please fix the highlighted fields.", fields));
+    }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ErrorResponse> handleUnreadable(HttpMessageNotReadableException ex) {
+        return ResponseEntity.badRequest()
+                .body(new ErrorResponse("That request was incomplete. Please try again.", null));
     }
 
     @ExceptionHandler(MaxUploadSizeExceededException.class)

@@ -153,14 +153,17 @@ public class AuthController {
 
     private ResponseCookie refreshCookie(Long userId, HttpServletRequest http, String newToken) {
         boolean secure = http.isSecure();
+        // path "/" (not /api/auth): the frontend middleware must see this cookie to guard
+        // app routes. Still httpOnly + SameSite=Strict (+ Secure on HTTPS), rotated and
+        // revoked server-side, so the wider path doesn't weaken it.
         if (newToken == null) {
             return ResponseCookie.from(REFRESH_COOKIE, "")
                     .httpOnly(true).secure(secure).sameSite("Strict")
-                    .path("/api/auth").maxAge(0).build();
+                    .path("/").maxAge(0).build();
         }
         return ResponseCookie.from(REFRESH_COOKIE, newToken)
                 .httpOnly(true).secure(secure).sameSite("Strict")
-                .path("/api/auth")
+                .path("/")
                 .maxAge(Duration.ofDays(props.getJwt().getRefreshTtlDays()).toSeconds())
                 .build();
     }
