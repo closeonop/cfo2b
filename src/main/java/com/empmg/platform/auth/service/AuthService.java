@@ -142,10 +142,17 @@ public class AuthService {
         }
         RefreshToken stored = refreshTokenRepo.findByTokenHash(sha256(refreshToken))
                 .orElseThrow(() -> new ApiException("Session expired. Please sign in again.", 401));
-        if (stored.getRevokedAt() != null || stored.getExpiresAt().isBefore(Instant.now())) {
+        Instant now = Instant.now();
+        // Rotation grace window: concurrent refreshes (two tabs, a page load racing an
+        // in-flight request) legitimately present the same cookie; the first rotates it
+        // and the second would otherwise be logged out. A revoked-for-less-than-30s
+        // token is accepted once and rotated again. Replay exposure is bounded to 30s.
+        boolean revokedRecently = stored.getRevokedAt() != null
+                && stored.getRevokedAt().isAfter(now.minus(Duration.ofSeconds(30)));
+        if (stored.getExpiresAt().isBefore(now) || (stored.getRevokedAt() != null && !revokedRecently)) {
             throw new ApiException("Session expired. Please sign in again.", 401);
         }
-        stored.setRevokedAt(Instant.now());
+        stored.setRevokedAt(now);
         refreshTokenRepo.save(stored);
 
         User user = userRepo.findById(stored.getUserId())
