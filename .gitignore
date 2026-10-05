@@ -1,0 +1,21 @@
+# build
+/target/
+*.class
+
+# env files — never commit secrets (keep the example)
+.env*
+!.env.example
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.settings/
+.classpath
+.project
+
+# logs
+*.log
+
+# uploads / local files
+/uploads/

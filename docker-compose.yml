@@ -1,0 +1,63 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: emp-db
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-empdb}
+      POSTGRES_USER: ${POSTGRES_USER:-emp}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-empdevpw}
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: emp-mailpit
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+
+  backend:
+    build: .
+    container_name: emp-backend
+    profiles: ["app"]
+    environment:
+      DB_URL: jdbc:postgresql://db:5432/${POSTGRES_DB:-empdb}
+      DB_USERNAME: ${POSTGRES_USER:-emp}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-empdevpw}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      DATA_ENCRYPTION_KEY: ${DATA_ENCRYPTION_KEY}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+      MAIL_HOST: mailpit
+      MAIL_PORT: "1025"
+      MAIL_ENABLED: "true"
+    ports:
+      - "8080:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ../emp mg1
+    container_name: emp-frontend
+    profiles: ["app"]
+    command: npm run start
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8080/api
+      PORT: "3000"
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+
+volumes:
+  pgdata:
