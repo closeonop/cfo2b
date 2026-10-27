@@ -172,7 +172,9 @@ public class AuthController {
     }
 
     private ResponseCookie refreshCookie(Long userId, HttpServletRequest http, String newToken) {
-        boolean secure = http.isSecure();
+        // TLS can terminate at the host proxy. Use trusted deployment config,
+        // rather than accepting arbitrary forwarded headers from the request.
+        boolean secure = http.isSecure() || props.getFrontendUrl().startsWith("https://");
         // path "/" (not /api/auth): the frontend middleware must see this cookie to guard
         // app routes. Still httpOnly + SameSite=Strict (+ Secure on HTTPS), rotated and
         // revoked server-side, so the wider path doesn't weaken it.
