@@ -19,3 +19,5 @@
 
 # uploads / local files
 /uploads/
+.neon
+node_modules/
