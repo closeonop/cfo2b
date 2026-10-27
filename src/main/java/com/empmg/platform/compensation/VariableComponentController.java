@@ -9,7 +9,8 @@ import com.empmg.platform.employee.repo.EmployeeRepo;
 import com.empmg.platform.employee.service.SalaryVisibility;
 import com.empmg.platform.security.AuthPrincipal;
 import com.empmg.platform.security.SecurityUtils;
-import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.transaction.annotation.Transactional;
@@ -40,7 +41,7 @@ public class VariableComponentController {
         }
     }
 
-    public record ComponentInput(@NotBlank String name, @NotBlank String calcType, @NotBlank BigDecimal value,
+    public record ComponentInput(@NotBlank @Size(max=120) String name, @NotBlank String calcType, @NotNull @Digits(integer=12,fraction=2) BigDecimal value,
                                  @NotBlank String period, LocalDate startDate, LocalDate endDate) {}
 
     @GetMapping("/employees/{employeeId}/components")
@@ -61,7 +62,7 @@ public class VariableComponentController {
     @PostMapping("/employees/{employeeId}/components")
     @PreAuthorize("hasAnyRole('ADMIN','CFO')")
     @Transactional
-    public ComponentDto create(@PathVariable Long employeeId, @RequestBody ComponentInput in) {
+    public ComponentDto create(@PathVariable Long employeeId, @Valid @RequestBody ComponentInput in) {
         AuthPrincipal p = SecurityUtils.current();
         Employee e = employeeRepo.findByIdAndCompanyId(employeeId, p.companyId())
                 .orElseThrow(() -> new ApiException("Employee not found.", 404));
@@ -86,7 +87,7 @@ public class VariableComponentController {
     @PutMapping("/components/{id}")
     @PreAuthorize("hasAnyRole('ADMIN','CFO')")
     @Transactional
-    public ComponentDto update(@PathVariable Long id, @RequestBody ComponentInput in) {
+    public ComponentDto update(@PathVariable Long id, @Valid @RequestBody ComponentInput in) {
         AuthPrincipal p = SecurityUtils.current();
         validate(in);
         VariableComponent c = componentRepo.findByIdAndCompanyId(id, p.companyId())
@@ -117,6 +118,10 @@ public class VariableComponentController {
     }
 
     private void validate(ComponentInput in) {
+        if (in.startDate() != null && in.endDate() != null && in.startDate().isAfter(in.endDate()))
+            throw new ApiException("The component end date must be on or after its start date.");
+        if ("PERCENT".equals(in.calcType()) && "ONE_TIME".equals(in.period()))
+            throw new ApiException("Use a fixed amount for one-time pay, or a recurring period for a percentage.");
         if (!List.of("FIXED", "PERCENT", "TARGET").contains(in.calcType())) {
             throw new ApiException("The calculation type must be a fixed amount, a percent of base salary, or a target amount.");
         }

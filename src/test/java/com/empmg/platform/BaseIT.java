@@ -45,11 +45,12 @@ public abstract class BaseIT {
     static void props(DynamicPropertyRegistry r) {
         r.add("spring.datasource.url", () -> env("TEST_DB_URL", "jdbc:postgresql://localhost:5433/empdb_test"));
         r.add("spring.datasource.username", () -> env("TEST_DB_USERNAME", "emp"));
-        r.add("spring.datasource.password", () -> env("TEST_DB_PASSWORD", "JGj_eJqk_uQrzecQVS3r1X_t"));
+        r.add("spring.datasource.password", () -> env("TEST_DB_PASSWORD", "empdevpw"));
         r.add("app.encryption.key", () -> TEST_KEY);
         r.add("app.jwt.access-secret", () -> ACCESS_SECRET);
         r.add("app.jwt.refresh-secret", () -> REFRESH_SECRET);
         r.add("app.mail.enabled", () -> "false");
+        r.add("storage.endpoint", () -> env("TEST_STORAGE_ENDPOINT", "http://localhost:9000"));
     }
 
     private static String env(String name, String fallback) {

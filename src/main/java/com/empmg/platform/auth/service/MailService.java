@@ -24,7 +24,7 @@ public class MailService {
 
     public void sendPasswordReset(String to, String resetLink) {
         if (!props.getMail().isEnabled()) {
-            log.info("[mail disabled] Password reset link for {}: {}", to, resetLink);
+            log.info("Password reset mail is disabled.");
             return;
         }
         try {
@@ -39,10 +39,9 @@ public class MailService {
                     <p>This link works once and expires in 30 minutes. If you didn't ask for this, you can ignore this email.</p>
                     """.formatted(resetLink), true);
             mailSender.send(msg);
-        } catch (MessagingException e) {
+        } catch (MessagingException | org.springframework.mail.MailException e) {
             // local dev has Mailpit; in dev failures shouldn't break the flow — log the link instead
-            log.warn("Could not send email to {} ({}). Reset link (log it only in dev): {}",
-                    to, e.getMessage(), resetLink);
+            log.warn("Password reset email delivery failed; check SMTP configuration.");
         }
     }
 }

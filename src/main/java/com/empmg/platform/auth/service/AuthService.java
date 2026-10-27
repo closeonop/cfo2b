@@ -94,7 +94,7 @@ public class AuthService {
 
     // ---------- login / refresh / logout ----------
 
-    @Transactional
+    @Transactional(noRollbackFor = ApiException.class)
     public AuthResult login(LoginRequest req, String ip) {
         String email = req.email().trim().toLowerCase();
         if (rateLimiter.isBlocked(email, ip)) {
@@ -134,8 +134,8 @@ public class AuthService {
     }
 
     /** Validates a refresh token from the cookie and rotates it. Returns the user + a new refresh token. */
-    @Transactional
     public record RefreshResult(User user, String newRefreshToken) {}
+    @Transactional
     public RefreshResult refresh(String refreshToken) {
         if (refreshToken == null || refreshToken.isBlank()) {
             throw new ApiException("Session expired. Please sign in again.", 401);
@@ -143,13 +143,8 @@ public class AuthService {
         RefreshToken stored = refreshTokenRepo.findByTokenHash(sha256(refreshToken))
                 .orElseThrow(() -> new ApiException("Session expired. Please sign in again.", 401));
         Instant now = Instant.now();
-        // Rotation grace window: concurrent refreshes (two tabs, a page load racing an
-        // in-flight request) legitimately present the same cookie; the first rotates it
-        // and the second would otherwise be logged out. A revoked-for-less-than-30s
-        // token is accepted once and rotated again. Replay exposure is bounded to 30s.
-        boolean revokedRecently = stored.getRevokedAt() != null
-                && stored.getRevokedAt().isAfter(now.minus(Duration.ofSeconds(30)));
-        if (stored.getExpiresAt().isBefore(now) || (stored.getRevokedAt() != null && !revokedRecently)) {
+        // A refresh token is single-use. The database lock serializes concurrent rotation.
+        if (!stored.getExpiresAt().isAfter(now) || stored.getRevokedAt() != null) {
             throw new ApiException("Session expired. Please sign in again.", 401);
         }
         stored.setRevokedAt(now);
@@ -208,6 +203,8 @@ public class AuthService {
                 .orElseThrow(() -> new ApiException("This reset link is invalid or has expired. Request a new one."));
         checkPassword(newPassword, user.getEmail());
         user.setPasswordHash(passwordEncoder.encode(newPassword));
+        user.setCredentialVersion(user.getCredentialVersion() + 1);
+        user.setPasswordChangeRequired(false);
         user.setFailedAttempts(0);
         user.setLockedUntil(null);
         userRepo.save(user);
@@ -224,7 +221,10 @@ public class AuthService {
             throw new ApiException("Your current password is incorrect.");
         }
         checkPassword(newPassword, user.getEmail());
+        if(passwordEncoder.matches(newPassword,user.getPasswordHash())) throw new ApiException("Choose a password different from your current one.");
         user.setPasswordHash(passwordEncoder.encode(newPassword));
+        user.setCredentialVersion(user.getCredentialVersion() + 1);
+        user.setPasswordChangeRequired(false);
         userRepo.save(user);
         refreshTokenRepo.revokeAllForUser(user.getId());
         audit.record(actor, actor.companyId(), "PASSWORD_CHANGED", "USER", user.getId(), Map.of());

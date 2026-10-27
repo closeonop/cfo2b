@@ -7,7 +7,8 @@ import com.empmg.platform.employee.repo.JobRoleRepo;
 import com.empmg.platform.security.AuthPrincipal;
 import com.empmg.platform.security.SecurityUtils;
 import com.empmg.platform.tier.repo.TierRepo;
-import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.transaction.annotation.Transactional;
@@ -36,15 +37,17 @@ public class JobRoleController {
         }
     }
 
-    public record RoleInput(@NotBlank String name, Long defaultTierId, BigDecimal minSalary,
-                            BigDecimal maxSalary, String defaultComponents) {}
+    public record RoleInput(@NotBlank @Size(max=120) String name, Long defaultTierId,
+                            @DecimalMin("0") @Digits(integer=12, fraction=2) BigDecimal minSalary,
+                            @DecimalMin("0") @Digits(integer=12, fraction=2) BigDecimal maxSalary, String defaultComponents) {}
 
     @GetMapping
-    public List<RoleDto> list() {
+    public List<RoleDto> list(@RequestParam(defaultValue="false") boolean includeArchived) {
         AuthPrincipal p = SecurityUtils.current();
         Map<Long, String> tierNames = new java.util.HashMap<>();
         tierRepo.findByCompanyIdOrderBySortOrderAscIdAsc(p.companyId()).forEach(t -> tierNames.put(t.getId(), t.getName()));
-        return jobRoleRepo.findByCompanyIdAndArchivedFalseOrderByNameAsc(p.companyId()).stream()
+        return jobRoleRepo.findByCompanyIdOrderByNameAsc(p.companyId()).stream()
+                .filter(r -> includeArchived || !r.isArchived())
                 .map(r -> RoleDto.of(r, tierNames.get(r.getDefaultTierId())))
                 .toList();
     }
@@ -52,7 +55,7 @@ public class JobRoleController {
     @PostMapping
     @PreAuthorize("hasAnyRole('ADMIN','CFO','HR')")
     @Transactional
-    public RoleDto create(@RequestBody RoleInput in) {
+    public RoleDto create(@Valid @RequestBody RoleInput in) {
         AuthPrincipal p = SecurityUtils.current();
         validate(p, in, null);
         JobRole r = jobRoleRepo.save(JobRole.builder()
@@ -72,7 +75,7 @@ public class JobRoleController {
     @PutMapping("/{id}")
     @PreAuthorize("hasAnyRole('ADMIN','CFO','HR')")
     @Transactional
-    public RoleDto update(@PathVariable Long id, @RequestBody RoleInput in) {
+    public RoleDto update(@PathVariable Long id, @Valid @RequestBody RoleInput in) {
         AuthPrincipal p = SecurityUtils.current();
         validate(p, in, id);
         JobRole r = jobRoleRepo.findByIdAndCompanyId(id, p.companyId())
@@ -94,6 +97,8 @@ public class JobRoleController {
         AuthPrincipal p = SecurityUtils.current();
         JobRole r = jobRoleRepo.findByIdAndCompanyId(id, p.companyId())
                 .orElseThrow(() -> new ApiException("Job role not found.", 404));
+        if (r.isArchived() && jobRoleRepo.findByCompanyIdAndNameIgnoreCaseAndArchivedFalse(p.companyId(),r.getName()).isPresent())
+            throw new ApiException("An active role already uses this name. Rename it before restoring this role.");
         r.setArchived(!r.isArchived());
         jobRoleRepo.save(r);
         audit.record(p, p.companyId(), r.isArchived() ? "JOB_ROLE_ARCHIVED" : "JOB_ROLE_RESTORED",
@@ -108,7 +113,7 @@ public class JobRoleController {
                         throw new ApiException("A job role with that name already exists.");
                     }
                 });
-        if (in.defaultTierId() != null && tierRepo.findByIdAndCompanyId(in.defaultTierId(), p.companyId()).isEmpty()) {
+        if (in.defaultTierId() != null && tierRepo.findByIdAndCompanyId(in.defaultTierId(), p.companyId()).filter(t -> !t.isArchived()).isEmpty()) {
             throw new ApiException("The default tier doesn't exist.");
         }
         if (in.minSalary() != null && in.maxSalary() != null && in.minSalary().compareTo(in.maxSalary()) > 0) {

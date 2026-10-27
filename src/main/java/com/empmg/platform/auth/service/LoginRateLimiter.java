@@ -36,6 +36,8 @@ public class LoginRateLimiter {
     }
 
     public void recordFailure(String email, String ip) {
+        // Persistent per-account lockout remains authoritative when this bounded cache is full.
+        if(failures.size()>=10000 && !failures.containsKey(key(email,ip))) return;
         failures.computeIfAbsent(key(email, ip), k -> new ArrayDeque<>());
         Deque<Instant> dq = failures.get(key(email, ip));
         synchronized (dq) {

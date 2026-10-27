@@ -42,6 +42,10 @@ public class EmployeeController {
     private final CompensationService compensationService;
     private final UserRepo userRepo;
     private final com.empmg.platform.audit.service.AuditService audit;
+    private final com.empmg.platform.auth.service.WelcomeService welcome;
+
+    @GetMapping("/{id}/private-profile")
+    public Object privateProfile(@PathVariable long id) { return welcome.privateProfile(SecurityUtils.current(),id); }
 
     public record UpsertRequest(
             String employeeCode, @NotBlank String firstName, @NotBlank String lastName,
@@ -115,6 +119,7 @@ public class EmployeeController {
 
         boolean self = p.employeeId() != null && p.employeeId().equals(id);
         boolean maySee = self || salaryVisibility.canSeeSalaries(p);
+        if (!maySee) throw new ApiException("You don't have permission to see this compensation.", 403);
 
         var components = componentRepo.findByCompanyIdAndEmployeeIdOrderByIdAsc(p.companyId(), id);
         var breakdown = compensationService.monthly(

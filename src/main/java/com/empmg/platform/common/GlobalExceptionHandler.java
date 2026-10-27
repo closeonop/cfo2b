@@ -28,7 +28,9 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(ApiException.class)
     public ResponseEntity<ErrorResponse> handleApi(ApiException ex) {
-        return ResponseEntity.status(ex.getStatus()).body(new ErrorResponse(ex.getMessage(), null));
+        var response=ResponseEntity.status(ex.getStatus());
+        if(ex.getStatus()==429) response.header("Retry-After","900");
+        return response.body(new ErrorResponse(ex.getMessage(), null));
     }
 
     @ExceptionHandler(BadCredentialsException.class)
@@ -56,6 +58,11 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleUnreadable(HttpMessageNotReadableException ex) {
         return ResponseEntity.badRequest()
                 .body(new ErrorResponse("That request was incomplete. Please try again.", null));
+    }
+    @ExceptionHandler({org.springframework.web.method.annotation.MethodArgumentTypeMismatchException.class,
+        org.springframework.web.bind.MissingServletRequestParameterException.class})
+    public ResponseEntity<ErrorResponse> handleParameter(Exception ex) {
+        return ResponseEntity.badRequest().body(new ErrorResponse("Check the required IDs and dates and try again.",null));
     }
 
     @ExceptionHandler(MaxUploadSizeExceededException.class)

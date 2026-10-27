@@ -46,7 +46,7 @@ public class EmployeeService {
         List<Employee> scoped = switch (p.role()) {
             case ADMIN, CFO, HR -> all;
             case MANAGER -> p.employeeId() == null ? List.of()
-                    : all.stream().filter(e -> p.employeeId().equals(e.getManagerId())).toList();
+                    : all.stream().filter(e -> p.employeeId().equals(e.getManagerId())||p.employeeId().equals(e.getId())).toList();
             case EMPLOYEE -> p.employeeId() == null ? List.of()
                     : all.stream().filter(e -> p.employeeId().equals(e.getId())).toList();
         };
@@ -136,7 +136,9 @@ public class EmployeeService {
             throw new ApiException("You don't have permission to add employees.", 403);
         }
         validateInput(p, in, null);
-        if (salary == null || salary.signum() < 0) {
+        if (salary == null) salary = BigDecimal.ZERO;
+        if (salary.signum() != 0) salaryVisibility.assertCanChangeSalaries(p);
+        if (salary.signum() < 0) {
             throw new ApiException("Please enter a salary of zero or more.");
         }
         Employee e = Employee.builder()
@@ -236,11 +238,18 @@ public class EmployeeService {
     }
 
     private void validateInput(AuthPrincipal p, EmployeeInput in, Long selfId) {
+        if (in.status() != null && !Set.of(Employee.ACTIVE, Employee.INACTIVE).contains(in.status()))
+            throw new ApiException("Status must be ACTIVE or INACTIVE.");
         if (in.firstName() == null || in.firstName().isBlank()) throw new ApiException("First name is required.");
         if (in.lastName() == null || in.lastName().isBlank()) throw new ApiException("Last name is required.");
         if (in.startDate() == null) throw new ApiException("Start date is required.");
+        if (in.firstName().trim().length()>100 || in.lastName().trim().length()>100) throw new ApiException("Names must be at most 100 characters.");
+        if (in.phone()!=null && in.phone().length()>40 || in.employeeCode()!=null && in.employeeCode().length()>40)
+            throw new ApiException("Phone and employee code must be at most 40 characters.");
+        if (in.team()!=null && in.team().length()>120) throw new ApiException("Team name must be at most 120 characters.");
         if (in.email() != null && !in.email().isBlank()) {
             String email = in.email().trim().toLowerCase();
+            if(email.length()>255 || !email.matches("[^\\s@]+@[^\\s@]+\\.[^\\s@]+")) throw new ApiException("Enter a valid email of at most 255 characters.");
             employeeRepo.findByCompanyIdAndEmailIgnoreCase(p.companyId(), email)
                     .ifPresent(other -> {
                         if (!other.getId().equals(selfId)) {
@@ -253,6 +262,12 @@ public class EmployeeService {
                     .orElseThrow(() -> new ApiException("The selected manager doesn't exist."));
             if (mgr.getId().equals(selfId)) {
                 throw new ApiException("An employee can't be their own manager.");
+            }
+            Set<Long> seen = new HashSet<>();
+            for (Employee ancestor = mgr; ancestor != null; ancestor = ancestor.getManagerId() == null ? null
+                    : employeeRepo.findByIdAndCompanyId(ancestor.getManagerId(), p.companyId()).orElse(null)) {
+                if (ancestor.getId().equals(selfId) || !seen.add(ancestor.getId()))
+                    throw new ApiException("This manager would create a reporting loop.");
             }
         }
         if (in.tierId() != null && tierRepo.findByIdAndCompanyId(in.tierId(), p.companyId()).isEmpty()) {

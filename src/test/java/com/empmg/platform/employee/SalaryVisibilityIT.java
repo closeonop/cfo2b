@@ -98,17 +98,18 @@ class SalaryVisibilityIT extends BaseIT {
         Ctx emp = createUser(cfo, AccessRole.EMPLOYEE, teamMember.get("id").asLong());
 
         assertEquals(3, getJson(cfo, "/api/employees").size());
-        assertEquals(1, getJson(mgr, "/api/employees").size());
-        assertEquals(teamMember.get("id").asLong(), getJson(mgr, "/api/employees").get(0).get("id").asLong());
+        assertEquals(2, getJson(mgr, "/api/employees").size());
+        assertTrue(java.util.stream.StreamSupport.stream(getJson(mgr, "/api/employees").spliterator(),false)
+                .anyMatch(e->e.get("id").asLong()==teamMember.get("id").asLong()));
         assertEquals(1, getJson(emp, "/api/employees").size());
         assertEquals(teamMember.get("id").asLong(), getJson(emp, "/api/employees").get(0).get("id").asLong());
     }
 
     @Test
-    void onlyAdminSeesAuditLog() throws Exception {
+    void adminAndHrSeeAuditLog() throws Exception {
         Ctx cfo = onboard("AuditCo");
         Ctx hr = createUser(cfo, AccessRole.HR, null);
-        assertEquals(403, statusOf(hr, "GET", "/api/audit", null));
+        assertEquals(200, statusOf(hr, "GET", "/api/audit", null));
         assertEquals(200, statusOf(cfo, "GET", "/api/audit", null));
     }
 }

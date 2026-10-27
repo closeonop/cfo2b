@@ -21,6 +21,7 @@ import java.util.Date;
 public class JwtService {
 
     private final AppProperties props;
+    private final com.empmg.platform.user.repo.UserRepo users;
 
     private SecretKey accessKey;
 
@@ -42,6 +43,7 @@ public class JwtService {
                 .claim("role", p.role().name())
                 .claim("email", p.email())
                 .claim("emp", p.employeeId())
+                .claim("cv", users.findById(p.userId()).orElseThrow().getCredentialVersion())
                 .issuedAt(Date.from(now))
                 .expiration(Date.from(now.plus(Duration.ofMinutes(props.getJwt().getAccessTtlMinutes()))))
                 .signWith(accessKey)
@@ -53,6 +55,9 @@ public class JwtService {
         try {
             Claims c = Jwts.parser().verifyWith(accessKey).build()
                     .parseSignedClaims(token).getPayload();
+            var user = users.findById(Long.valueOf(c.getSubject())).orElse(null);
+            if (user == null || c.get("cv", Integer.class) == null
+                    || c.get("cv", Integer.class) != user.getCredentialVersion()) return null;
             return new AuthPrincipal(
                     Long.valueOf(c.getSubject()),
                     c.get("cid", Long.class),

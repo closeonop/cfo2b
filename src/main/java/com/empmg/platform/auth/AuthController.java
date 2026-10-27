@@ -33,8 +33,10 @@ public class AuthController {
     public static final String REFRESH_COOKIE = "emp_rt";
 
     private final AuthService authService;
+    private final com.empmg.platform.auth.service.WelcomeService welcome;
     private final CompanyRepo companyRepo;
     private final EmployeeRepo employeeRepo;
+    private final com.empmg.platform.user.repo.UserRepo userRepo;
     private final AppProperties props;
 
     @PostMapping("/onboarding")
@@ -111,6 +113,10 @@ public class AuthController {
         user.put("email", p.email());
         user.put("role", p.role().name());
         user.put("employeeId", p.employeeId());
+        user.put("passwordChangeRequired",userRepo.findById(p.userId()).orElseThrow().isPasswordChangeRequired());
+        user.put("welcomeRequired",userRepo.findById(p.userId()).orElseThrow().isWelcomeRequired());
+         user.put("companyId", p.companyId());
+         user.put("toursCompleted", userRepo.findById(p.userId()).orElseThrow().getToursCompleted());
         Map<String, Object> out = new LinkedHashMap<>();
         out.put("user", user);
         companyRepo.findById(p.companyId()).ifPresent(c -> {
@@ -145,6 +151,20 @@ public class AuthController {
 
     // ---------- helpers ----------
 
+    @GetMapping("/welcome/status") public Object welcomeStatus() { return welcome.status(SecurityUtils.current()); }
+    @PostMapping("/welcome/request-code") public Object welcomeCode() { return welcome.requestCode(SecurityUtils.current()); }
+    @PostMapping("/welcome/verify-code") public Object welcomeVerify(@RequestBody Map<String,String> body) { return welcome.verify(SecurityUtils.current(),body.get("code")); }
+    @PostMapping("/welcome/password")
+    @org.springframework.transaction.annotation.Transactional
+    public ResponseEntity<TokenResponse> welcomePassword(@Valid @RequestBody ChangePasswordRequest req,HttpServletRequest http) {
+        var p=SecurityUtils.current(); welcome.requireVerified(p);
+        if(!welcome.pending(p).isPasswordChangeRequired()) throw new ApiException("Your password is already set.");
+        authService.changePassword(p,req.currentPassword(),req.newPassword());
+        var result=authService.login(new LoginRequest(p.email(),req.newPassword()),clientIp(http));
+        return ResponseEntity.ok().header("Set-Cookie",refreshCookie(result.response().user().id(),http,result.refreshToken()).toString()).body(result.response());
+    }
+    @PostMapping("/welcome/profile") public Object welcomeProfile(@Valid @RequestBody com.empmg.platform.auth.service.WelcomeService.ProfileInput body) { return welcome.complete(SecurityUtils.current(),body); }
+
     private static void requireXrw(String xrw) {
         if (!"XMLHttpRequest".equals(xrw)) {
             throw new ApiException("Session expired. Please sign in again.", 401);
@@ -169,7 +189,7 @@ public class AuthController {
     }
 
     private static String clientIp(HttpServletRequest http) {
-        String fwd = http.getHeader("X-Forwarded-For");
-        return fwd != null ? fwd.split(",")[0].trim() : http.getRemoteAddr();
+        // Let the configured trusted-proxy layer resolve this; never trust a raw client header.
+        return http.getRemoteAddr();
     }
 }

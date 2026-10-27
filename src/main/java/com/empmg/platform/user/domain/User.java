@@ -15,6 +15,11 @@ import java.time.Instant;
 @Builder
 public class User {
 
+    @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.JSON)
+    @Column(name = "tours_completed", nullable = false, columnDefinition = "jsonb")
+    @Builder.Default
+    private java.util.List<String> toursCompleted = new java.util.ArrayList<>();
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -27,6 +32,15 @@ public class User {
 
     @Column(name = "password_hash", nullable = false, length = 100)
     private String passwordHash;
+
+    @Column(name = "password_change_required", nullable = false)
+    private boolean passwordChangeRequired;
+
+    @Column(name = "welcome_required", nullable = false)
+    private boolean welcomeRequired;
+
+    @Column(name = "credential_version", nullable = false)
+    private int credentialVersion;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "access_role", nullable = false, length = 20)

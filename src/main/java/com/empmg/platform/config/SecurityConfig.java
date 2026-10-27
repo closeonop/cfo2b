@@ -42,6 +42,7 @@ public class SecurityConfig {
                 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/actuator/health", "/error").permitAll()
+                        .requestMatchers("/api/hr/files/*/download").permitAll()
                         .requestMatchers("/api/auth/login", "/api/auth/onboarding",
                                 "/api/auth/forgot-password", "/api/auth/reset-password").permitAll()
                         // refresh/logout are guarded by the httpOnly cookie + X-Requested-With header

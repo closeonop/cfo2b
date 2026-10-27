@@ -1,5 +1,16 @@
 # Security — controls implemented and how to rotate secrets
 
+## October 11 additions
+
+- Admin and CFO can assign all built-in roles, create linked accounts and generate temporary credentials. Generated passwords require a first-login change. Role changes and deactivation take effect on the next API request through fresh database authorization.
+- Password reset, password change and regenerated credentials increment a credential version, immediately invalidating existing access tokens as well as revoking refresh tokens. Refresh tokens are single-use and locked during rotation.
+- Sensitive public endpoints and authenticated writes have bounded, per-node rate limits. Move these counters to shared storage before multiple API replicas.
+- HR record payloads and personnel-file contents are encrypted with AES-GCM. File download links expire after 60 seconds and recheck the issuing account and direct-manager permissions. File uploads are limited to 5 MB and validated formats.
+- HR/Admin and direct-manager scopes are checked by the API. CFO account administration does not automatically grant access to other employees’ confidential personnel files.
+- Reset links and generated Spring Security fallback credentials are no longer printed in application logs. Synthetic test logs are not production logging configuration.
+
+The HR retention setting records the company policy; automatic deletion is not enabled. Confirm jurisdiction-specific retention and legal holds before configuring a purge. Database disks, backups, SMTP, TLS termination and secret management remain deployment responsibilities.
+
 ## Authentication
 
 - Passwords hashed with **BCrypt (cost 12)**; policy: ≥10 chars, letter + number, ≠ email.
@@ -19,6 +30,12 @@
   on reset. Mail is caught locally by Mailpit (http://localhost:8025).
 
 ## Authorization
+
+- Tour completion is self-scoped tutorial metadata. Keys are allowlisted against
+  registered pages and HR modules; prepared SQL appends atomically and idempotently.
+  Callers cannot choose a user/company or replace arbitrary preference arrays.
+  Existing JWT setup gates and authenticated-write rate limits apply. No tour
+  endpoint grants access or changes credentials or business records.
 
 - Every endpoint checks the **access role AND ownership/team** on the server;
   deny by default (`anyRequest().authenticated()` + method-level checks).
@@ -53,6 +70,31 @@
   'none'`; `X-Content-Type-Options: nosniff`; strict referrer policy; frames denied.
 - Production profile (`prod`) **fails fast** if required secrets are missing or
   still equal the values shipped in `.env.example`.
+
+## Portal setup and attendance controls
+
+Finance review (20 October): HR raise preview/create/detail/cancel responses now
+respect salary visibility, including the effective percentage derived from pay.
+Raise details require an authorized finance/HR role. Tier assignments validate the
+entire company-scoped active employee selection before writing. Band/role/component
+inputs have server validation; report CSV month requests are bounded to 36.
+
+First-login credentials cannot access business APIs before setup completes.
+Demo OTP is opt-in, expires after ten minutes, has a sixty-second resend cooldown,
+five verification attempts and account/IP request limits. Verification is consumed
+once; credential changes revoke sessions. This mock is not email ownership proof.
+Keep `DEMO_OTP_ENABLED=false` in production until a real provider is implemented.
+
+Private onboarding profiles use authenticated field encryption and explicit
+self/Admin/HR/CFO field permissions. Managers cannot read payment profiles.
+Attendance uses server time and employee row locks; overlaps, self approval,
+cross-company references and changes to submitted/approved weeks are rejected.
+Audit records omit OTPs, passwords and bank account numbers.
+
+Forwarded headers default to ignored (`FORWARD_HEADERS_STRATEGY=none`). Only enable
+proxy forwarding behind an explicitly trusted edge that strips client headers.
+In-memory IP throttles are per process; shared throttling is needed if deploying
+multiple application instances. Account lockout remains persisted in PostgreSQL.
 
 ## Supply chain
 

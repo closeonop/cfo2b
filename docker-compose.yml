@@ -1,4 +1,33 @@
 services:
+  backup:
+    image: postgres:16-alpine
+    profiles: ["operations"]
+    restart: unless-stopped
+    entrypoint: ["sh", "/scripts/backup.sh"]
+    environment:
+      PGHOST: db
+      PGDATABASE: ${POSTGRES_DB:-empdb}
+      PGUSER: ${POSTGRES_USER:-emp}
+      PGPASSWORD: ${POSTGRES_PASSWORD:-empdevpw}
+    volumes:
+      - ./scripts/backup.sh:/scripts/backup.sh:ro
+      - backups:/backups
+    depends_on:
+      db:
+        condition: service_healthy
+  minio:
+    build:
+      context: .
+      dockerfile: Dockerfile.minio
+    command: server /data --console-address ':9001'
+    environment:
+      MINIO_ROOT_USER: ${STORAGE_ACCESS_KEY:-empminioadmin}
+      MINIO_ROOT_PASSWORD: ${STORAGE_SECRET_KEY:-empminioadmin-secret}
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - filedata:/data
   db:
     image: postgres:16-alpine
     container_name: emp-db
@@ -36,9 +65,15 @@ services:
       DATA_ENCRYPTION_KEY: ${DATA_ENCRYPTION_KEY}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+      DEMO_OTP_ENABLED: ${DEMO_OTP_ENABLED:-false}
+      FORWARD_HEADERS_STRATEGY: ${FORWARD_HEADERS_STRATEGY:-none}
       MAIL_HOST: mailpit
       MAIL_PORT: "1025"
       MAIL_ENABLED: "true"
+      STORAGE_ENDPOINT: http://minio:9000
+      STORAGE_BUCKET: ${STORAGE_BUCKET:-emp-files}
+      STORAGE_ACCESS_KEY: ${STORAGE_ACCESS_KEY:-empminioadmin}
+      STORAGE_SECRET_KEY: ${STORAGE_SECRET_KEY:-empminioadmin-secret}
     ports:
       - "8080:8080"
     depends_on:
@@ -60,4 +95,6 @@ services:
       - backend
 
 volumes:
+  backups:
   pgdata:
+  filedata:

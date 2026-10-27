@@ -116,7 +116,7 @@ public class RaiseService {
         if (Raise.APPROVED.equals(raise.getStatus())) {
             applyIfDue(raise, p);
         }
-        return summarize(raise);
+        return summarize(raise, salaryVisibility.canSeeSalaries(p));
     }
 
     @Transactional
@@ -134,7 +134,7 @@ public class RaiseService {
         raiseRepo.save(raise);
         audit.record(p, p.companyId(), "RAISE_APPROVED", "RAISE", id, Map.of());
         applyIfDue(raise, p);
-        return summarize(raise);
+        return summarize(raise, salaryVisibility.canSeeSalaries(p));
     }
 
     @Transactional
@@ -149,7 +149,7 @@ public class RaiseService {
         raise.setStatus(Raise.REJECTED);
         raiseRepo.save(raise);
         audit.record(p, p.companyId(), "RAISE_REJECTED", "RAISE", id, Map.of());
-        return summarize(raise);
+        return summarize(raise, salaryVisibility.canSeeSalaries(p));
     }
 
     @Transactional
@@ -165,7 +165,7 @@ public class RaiseService {
         raise.setStatus(Raise.CANCELLED);
         raiseRepo.save(raise);
         audit.record(p, p.companyId(), "RAISE_CANCELLED", "RAISE", id, Map.of());
-        return summarize(raise);
+        return summarize(raise, salaryVisibility.canSeeSalaries(p));
     }
 
     @Transactional(readOnly = true)
@@ -182,6 +182,7 @@ public class RaiseService {
 
     @Transactional(readOnly = true)
     public RaiseDetail detail(AuthPrincipal p, Long id) {
+        if (!p.role().canProposeRaise()) throw new ApiException("You do not have permission to view raises.", 403);
         Raise raise = load(p, id);
         boolean seeSalary = salaryVisibility.canSeeSalaries(p);
         List<RaiseItem> items = raiseItemRepo.findByRaiseId(raise.getId());
@@ -197,7 +198,7 @@ public class RaiseService {
                     seeSalary ? item.getOldSalary() : null, seeSalary ? item.getNewSalary() : null, item.isCapped()));
         }
         return new RaiseDetail(summarize(raise, seeSalary), rows,
-                seeSalary ? totalNew.subtract(totalOld) : null);
+                seeSalary ? summarize(raise).monthlyDelta() : null);
     }
 
     public record DetailItem(Long employeeId, String name, BigDecimal oldSalary, BigDecimal newSalary, boolean capped) {}
@@ -286,8 +287,8 @@ public class RaiseService {
     private void validateRequest(RaiseRequest req) {
         if (req.effectiveDate() == null) throw new ApiException("Please choose an effective date.");
         if (req.reason() == null || req.reason().isBlank()) throw new ApiException("Please give a reason for the raise.");
-        if (req.percent() == null && req.fixedAmount() == null) {
-            throw new ApiException("Enter a percent or a fixed amount.");
+        if ((req.percent() == null) == (req.fixedAmount() == null)) {
+            throw new ApiException("Enter exactly one of percent or fixed amount.");
         }
         if (req.percent() != null && (req.percent().signum() < 0 || req.percent().compareTo(new BigDecimal("1000")) > 0)) {
             throw new ApiException("Percent must be between 0 and 1000.");
@@ -296,11 +297,8 @@ public class RaiseService {
             throw new ApiException("The fixed amount can't be negative.");
         }
         String cp = req.capPolicy() == null ? "ALLOW" : req.capPolicy();
-        if (!List.of("CAP", "ALLOW", "MOVE").contains(cp)) {
-            throw new ApiException("The tier maximum option isn't valid.");
-        }
-        if ("MOVE".equals(cp) && req.targetTierId() == null) {
-            throw new ApiException("Choose the tier to move over-maximum employees to.");
+        if (!List.of("CAP", "ALLOW").contains(cp)) {
+            throw new ApiException("Choose CAP or ALLOW for the tier maximum option.");
         }
     }
 
@@ -311,6 +309,9 @@ public class RaiseService {
     private CompanyData loadScope(AuthPrincipal p, RaiseRequest req, String capPolicy, Long targetTierId) {
         List<Employee> employees = new ArrayList<>();
         String scopeNote;
+        if (req.employeeIds() != null && !req.employeeIds().isEmpty() && (req.tierId() != null || req.employeeIds().contains(null)
+                || new HashSet<>(req.employeeIds()).size() != req.employeeIds().size()))
+            throw new ApiException("Select a tier or unique employees, not both.");
         if (req.employeeIds() != null && !req.employeeIds().isEmpty()) {
             for (Long id : req.employeeIds()) {
                 employees.add(employeeRepo.findByIdAndCompanyId(id, p.companyId())
@@ -331,24 +332,19 @@ public class RaiseService {
 
         List<Item> items = new ArrayList<>();
         for (Employee e : employees) {
+            if (!Employee.ACTIVE.equals(e.getStatus())) throw new ApiException("Raises require active employees.");
             Tier tier = e.getTierId() != null ? tierRepo.findByIdAndCompanyId(e.getTierId(), p.companyId()).orElse(null) : null;
             BigDecimal tierMax = tier != null ? tier.getMaxSalary() : null;
             MoneyMath.Outcome outcome = MoneyMath.computeRaise(e.getBaseSalary(), req.percent(), req.fixedAmount(),
                     tierMax, capPolicy, salaryVisibility.company(p.companyId()).getRoundingRule());
             Boolean tierChanged = null;
             String warning = null;
-            if ("MOVE".equals(capPolicy) && tierMax != null
-                    && outcome.newSalary().compareTo(tierMax) > 0) {
-                warning = "Goes above the tier maximum — will be moved to the tier you chose.";
-                tierChanged = true;
-            } else if (outcome.capped()) {
-                warning = "Capped at the tier maximum.";
+            if (outcome.capped()) {
+                warning = e.getBaseSalary().compareTo(tierMax) > 0
+                        ? "Already above the band maximum. Existing pay is preserved."
+                        : "Capped at the band maximum.";
             } else if (tierMax != null && outcome.newSalary().compareTo(tierMax) > 0) {
                 warning = "Goes above the tier maximum (allowed).";
-            }
-            if ("MOVE".equals(capPolicy) && Boolean.TRUE.equals(tierChanged) && targetTierId != null
-                    && !targetTierId.equals(e.getTierId())) {
-                e.setTierId(targetTierId);
             }
             items.add(new Item(e, outcome.newSalary(), outcome.capped(), outcome.percentApplied(), warning, tierChanged));
         }
@@ -358,6 +354,7 @@ public class RaiseService {
     private Preview buildPreview(AuthPrincipal p, CompanyData data, LocalDate effectiveDate) {
         String period = salaryVisibility.company(p.companyId()).getSalaryPeriod();
         BigDecimal totalOld = BigDecimal.ZERO, totalNew = BigDecimal.ZERO;
+        boolean seeSalary = salaryVisibility.canSeeSalaries(p);
         List<PreviewItem> rows = new ArrayList<>();
         List<String> warnings = new ArrayList<>();
         int cappedTotal = 0;
@@ -372,21 +369,21 @@ public class RaiseService {
             rows.add(new PreviewItem(item.employee().getId(),
                     item.employee().getFirstName() + " " + item.employee().getLastName(),
                     tier != null ? tier.getName() : null,
-                    item.employee().getBaseSalary(), item.newSalary(), item.percentApplied(),
+                    seeSalary ? item.employee().getBaseSalary() : null, seeSalary ? item.newSalary() : null, seeSalary ? item.percentApplied() : null,
                     item.capped(), item.tierWarning(), item.tierChanged()));
         }
         if (cappedTotal > 0) {
             warnings.add(cappedTotal + (cappedTotal == 1 ? " person" : " people")
-                    + " will be capped at their tier maximum.");
+                    + " limited by the band policy. Existing pay will not be reduced.");
         }
         if (effectiveDate.isAfter(LocalDate.now())) {
             warnings.add("This raise is scheduled — it applies automatically on "
                     + effectiveDate + ".");
         }
         BigDecimal monthlyDelta = totalNew.subtract(totalOld).setScale(2, RoundingMode.HALF_UP);
-        return new Preview(rows, data.items().size(), totalOld.setScale(2, RoundingMode.HALF_UP),
-                totalNew.setScale(2, RoundingMode.HALF_UP), monthlyDelta,
-                monthlyDelta.multiply(BigDecimal.valueOf(12)).setScale(2, RoundingMode.HALF_UP), warnings);
+        return new Preview(rows, data.items().size(), seeSalary ? totalOld.setScale(2, RoundingMode.HALF_UP) : null,
+                seeSalary ? totalNew.setScale(2, RoundingMode.HALF_UP) : null, seeSalary ? monthlyDelta : null,
+                seeSalary ? monthlyDelta.multiply(BigDecimal.valueOf(12)).setScale(2, RoundingMode.HALF_UP) : null, warnings);
     }
 
     private RaiseSummary summarize(Raise raise) {
@@ -396,9 +393,10 @@ public class RaiseService {
     private RaiseSummary summarize(Raise raise, boolean seeSalary) {
         List<RaiseItem> items = raiseItemRepo.findByRaiseId(raise.getId());
         BigDecimal totalOld = BigDecimal.ZERO, totalNew = BigDecimal.ZERO;
+        String period = salaryVisibility.company(raise.getCompanyId()).getSalaryPeriod();
         for (RaiseItem item : items) {
-            totalOld = totalOld.add(item.getOldSalary());
-            totalNew = totalNew.add(item.getNewSalary());
+            totalOld = totalOld.add(MoneyMath.monthlyOf(item.getOldSalary(), period));
+            totalNew = totalNew.add(MoneyMath.monthlyOf(item.getNewSalary(), period));
         }
         return new RaiseSummary(raise.getId(), raise.getStatus(), raise.getPercent(), raise.getFixedAmount(),
                 raise.getEffectiveDate(), raise.getReason(), raise.getScopeNote(), items.size(),

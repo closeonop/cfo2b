@@ -1,0 +1,25 @@
+name: Backend checks
+on: [push, pull_request]
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: empdb_test
+          POSTGRES_USER: emp
+          POSTGRES_PASSWORD: ci-only-password
+        ports: ["5433:5432"]
+        options: --health-cmd "pg_isready -U emp -d empdb_test" --health-interval 5s --health-timeout 3s --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: maven
+      - run: docker compose up -d minio
+      - run: mvn -B verify
+        env:
+          TEST_DB_PASSWORD: ci-only-password

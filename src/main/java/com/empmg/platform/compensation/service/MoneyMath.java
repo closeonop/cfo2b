@@ -44,13 +44,14 @@ public final class MoneyMath {
      */
     public static Outcome computeRaise(BigDecimal oldSalary, BigDecimal percent, BigDecimal fixedAmount,
                                        BigDecimal tierMax, String capPolicy, String roundingRule) {
-        BigDecimal computed = raise(oldSalary, percent, fixedAmount);
+        BigDecimal computed = round(raise(oldSalary, percent, fixedAmount), roundingRule)
+                .setScale(2, RoundingMode.HALF_UP).max(oldSalary);
         boolean capped = false;
         if ("CAP".equals(capPolicy) && tierMax != null && computed.compareTo(tierMax) > 0) {
-            computed = tierMax;
+            computed = tierMax.max(oldSalary); // a raise must never cut existing pay
             capped = true;
         }
-        computed = round(computed, roundingRule).setScale(2, RoundingMode.HALF_UP);
+        computed = computed.setScale(2, RoundingMode.HALF_UP);
         BigDecimal percentApplied = oldSalary.signum() == 0
                 ? null
                 : computed.subtract(oldSalary).divide(oldSalary, 4, RoundingMode.HALF_UP).multiply(HUNDRED);

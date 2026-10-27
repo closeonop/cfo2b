@@ -51,7 +51,7 @@ public class ReportController {
                                       @RequestParam(defaultValue = "12") int months,
                                       HttpServletRequest request) {
         ReportService.Table table = switch (name) {
-            case "payroll-summary" -> reportService.payrollSummary(SecurityUtils.current(), months);
+            case "payroll-summary" -> reportService.payrollSummary(SecurityUtils.current(), Math.min(Math.max(months, 1), 36));
             case "cost-by-tier" -> reportService.costBy(SecurityUtils.current(), "tier");
             case "cost-by-role" -> reportService.costBy(SecurityUtils.current(), "role");
             case "cost-by-team" -> reportService.costBy(SecurityUtils.current(), "team");
@@ -73,8 +73,9 @@ public class ReportController {
     /** CSV safety for text cells; numbers and dates pass through unchanged. */
     private static String cell(String value) {
         if (value == null) return "";
-        return value.matches("-?\\d+(\\.\\d+)?") || value.matches("\\d{4}-\\d{2}-\\d{2}")
+        String safe = value.matches("-?\\d+(\\.\\d+)?") || value.matches("\\d{4}-\\d{2}-\\d{2}")
                 || value.matches("\\d{4}-\\d{2}") || value.chars().allMatch(Character::isDigit)
                 ? value : CsvSafety.safe(value);
+        return "\"" + safe.replace("\"", "\"\"") + "\"";
     }
 }

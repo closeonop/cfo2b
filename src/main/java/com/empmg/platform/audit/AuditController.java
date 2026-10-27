@@ -29,7 +29,7 @@ public class AuditController {
                                     @RequestParam(required = false) Instant to,
                                     @RequestParam(defaultValue = "0") int page,
                                     @RequestParam(defaultValue = "50") int size) {
-        if (!SecurityUtils.current().role().name().equals("ADMIN")) {
+        if (!java.util.Set.of("ADMIN","HR").contains(SecurityUtils.current().role().name())) {
             throw new ApiException("Only the administrator can view the audit log.", 403);
         }
         Page<com.empmg.platform.audit.domain.AuditLog> result = repo.search(

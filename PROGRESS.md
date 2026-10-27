@@ -1,5 +1,7 @@
 # PROGRESS.md
 
+**Current status (2026-10-11):** the employee lifecycle, productivity, hiring and five approved portal additions are implemented. The [current feature audit](../emp%20mg1/FEATURE_AUDIT.md) supersedes the historical phase labels and checklist below. Production hosting, legal retention rules, performance benchmarking and off-machine restore verification remain operational work.
+
 Status after this delivery run (2026-10-06). Phases follow BUILD_INSTRUCTIONS §5.
 
 ## Phase status

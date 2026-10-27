@@ -9,6 +9,7 @@ import java.util.Optional;
 public interface JobRoleRepo extends JpaRepository<JobRole, Long> {
 
     List<JobRole> findByCompanyIdAndArchivedFalseOrderByNameAsc(Long companyId);
+    List<JobRole> findByCompanyIdOrderByNameAsc(Long companyId);
 
     Optional<JobRole> findByIdAndCompanyId(Long id, Long companyId);
 

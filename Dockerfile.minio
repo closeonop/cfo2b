@@ -1,0 +1,12 @@
+# Build the pinned upstream server because published MinIO images are unavailable.
+FROM golang:1.24-alpine AS build
+RUN apk add --no-cache git
+RUN git clone --depth 1 --branch RELEASE.2025-04-22T22-12-26Z https://github.com/minio/minio.git /src
+WORKDIR /src
+RUN CGO_ENABLED=0 go build -trimpath -o /minio .
+FROM alpine:3.21
+RUN apk add --no-cache ca-certificates && adduser -D minio
+COPY --from=build /minio /usr/local/bin/minio
+RUN mkdir /data && chown minio /data
+USER minio
+ENTRYPOINT ["minio"]

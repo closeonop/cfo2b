@@ -8,7 +8,7 @@ Everything you need, in the order you'll need it. No jargon.
    company name and your email, choose a password. You are now the Admin.
 2. **Check Settings** — pick your currency, number style (1,234,567 vs
    12,34,567), whether salaries are monthly or annual, and how raises round.
-3. **Create tiers** — *Tiers → New tier*. Example: Tier 1 from 1,500 to 4,000;
+3. **Create tiers** — *Tiers → New pay band*. Example: Tier 1 from 1,500 to 4,000;
    Tier 2 from 4,000 to 8,000. The range is a guideline — the app warns, never
    blocks.
 4. **Bring your people in** — *Employees → Import CSV*:
@@ -21,15 +21,17 @@ Everything you need, in the order you'll need it. No jargon.
 
 ## Giving a raise
 
-*Compensation → Give a raise*:
+*Compensation → Plan a raise* (HR: *Propose a raise*):
 
 1. Choose **who**: a whole tier, or tick individual people.
 2. Choose **how much**: a percent (e.g. 10%) or a fixed amount, and the date it
    takes effect.
-3. Press **Preview the cost** — you see every person's old pay, new pay, and the
-   total extra cost per month and per year **before anything changes**.
-4. If someone would cross their tier maximum, you choose: cap them at the top of
-   the tier, or allow it.
+3. Choose the band policy: cap at the maximum or allow above it. Existing pay is
+   never reduced by a cap.
+4. Press **Preview the cost** — Finance sees old/new base pay and the monthly/yearly
+   impact before anything changes. HR without salary access sees the people and
+   proposal while pay figures remain hidden. Go back to change the band policy,
+   then preview again.
 5. **Confirm**. Future-dated raises apply automatically on their date. HR can
    prepare a raise for your approval if you prefer a second pair of eyes.
 

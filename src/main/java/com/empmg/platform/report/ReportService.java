@@ -66,7 +66,7 @@ public class ReportService {
             BigDecimal total = BigDecimal.ZERO;
             for (Employee e : employees) {
                 LocalDate leftOn = e.getUpdatedAt().atZone(java.time.ZoneOffset.UTC).toLocalDate();
-                if (!Employee.ACTIVE.equals(e.getStatus()) && leftOn.isAfter(monthEnd)) continue;
+                if (e.getStartDate().isAfter(monthEnd) || !Employee.ACTIVE.equals(e.getStatus()) && !leftOn.isAfter(monthEnd)) continue;
                 BigDecimal salary = salaryAt(byEmployee.get(e.getId()), monthEnd);
                 if (salary != null) total = total.add(MoneyMath.monthlyOf(salary, period));
             }
@@ -74,7 +74,7 @@ public class ReportService {
                     total.setScale(2, RoundingMode.HALF_UP).toPlainString()));
         }
         audit.record(p, cid, "REPORT_VIEWED", "REPORT", "payroll-summary", Map.of("months", months));
-        return new Table(List.of("month", "base_cost_" + period.toLowerCase()), rows, null);
+        return new Table(List.of("month", "base_cost_monthly"), rows, null);
     }
 
     private BigDecimal salaryAt(List<SalaryHistory> list, LocalDate date) {
@@ -132,6 +132,7 @@ public class ReportService {
     public Table salaryHistory(AuthPrincipal p, LocalDate from, LocalDate to) {
         salaryVisibility.assertCanSeeSalaries(p);
         Long cid = p.companyId();
+        if (from != null && to != null && from.isAfter(to)) throw new ApiException("The end date must be on or after the start date.");
         Map<Long, String> names = employeeNames(cid);
         List<SalaryHistory> history = salaryHistoryRepo.findByCompanyIdOrderByCreatedAtDesc(cid).stream()
                 .filter(h -> (from == null || !h.getEffectiveDate().isBefore(from))
@@ -166,13 +167,16 @@ public class ReportService {
         for (Employee e : activeEmployees(cid)) {
             for (VariableComponent c : comps.getOrDefault(e.getId(), List.of())) {
                 if (!c.isActive()) continue;
+                LocalDate today = LocalDate.now();
+                if (c.getStartDate() != null && c.getStartDate().isAfter(today)
+                        || c.getEndDate() != null && c.getEndDate().isBefore(today)) continue;
                 String monthly;
-                if (VariableComponent.PERCENT.equals(c.getCalcType())) {
+                if (VariableComponent.ONE_TIME.equals(c.getPeriod())) {
+                    monthly = "one-time";
+                } else if (VariableComponent.PERCENT.equals(c.getCalcType())) {
                     monthly = MoneyMath.monthlyOf(e.getBaseSalary(), period)
                             .multiply(c.getValue()).divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP)
                             .toPlainString();
-                } else if (VariableComponent.ONE_TIME.equals(c.getPeriod())) {
-                    monthly = "one-time";
                 } else {
                     monthly = c.monthlyEquivalent().toPlainString();
                 }

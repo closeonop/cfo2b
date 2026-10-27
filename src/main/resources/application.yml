@@ -35,7 +35,7 @@ server:
   error:
     include-stacktrace: never
     include-message: never
-  forward-headers-strategy: framework
+  forward-headers-strategy: ${FORWARD_HEADERS_STRATEGY:none}
 
 management:
   endpoints:
@@ -47,6 +47,8 @@ management:
       show-details: never
 
 app:
+  # Local simulation only. A fixed code never proves ownership of an email address.
+  demo-otp-enabled: ${DEMO_OTP_ENABLED:false}
   jwt:
     access-secret: ${JWT_ACCESS_SECRET:}
     refresh-secret: ${JWT_REFRESH_SECRET:}
@@ -68,3 +70,9 @@ logging:
   level:
     org.hibernate.SQL: warn
     org.springframework.security: warn
+
+storage:
+  endpoint: ${STORAGE_ENDPOINT:http://localhost:9000}
+  bucket: ${STORAGE_BUCKET:emp-files}
+  access-key: ${STORAGE_ACCESS_KEY:empminioadmin}
+  secret-key: ${STORAGE_SECRET_KEY:empminioadmin-secret}

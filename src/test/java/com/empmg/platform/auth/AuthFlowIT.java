@@ -100,6 +100,10 @@ class AuthFlowIT extends BaseIT {
         org.junit.jupiter.api.Assertions.assertEquals(200, rotated.getResponse().getStatus());
         org.junit.jupiter.api.Assertions.assertTrue(
                 rotated.getResponse().getContentAsString().contains("accessToken"));
+        mvc.perform(post("/api/auth/refresh")
+                        .cookie(new jakarta.servlet.http.Cookie("emp_rt", token))
+                        .header("X-Requested-With", "XMLHttpRequest"))
+                .andExpect(status().isUnauthorized());
     }
 
     @Test
@@ -127,6 +131,7 @@ class AuthFlowIT extends BaseIT {
                 .andExpect(status().isOk());
 
         // old password no longer works, new one does
+        assertEquals(401, statusOf(ctx, "GET", "/api/employees", null));
         assertEquals(401, statusOf(null, "POST", "/api/auth/login",
                 Map.of("email", ctx.email(), "password", PASSWORD)));
         assertNotNull(loginAs(ctx.email(), newPassword));
@@ -146,5 +151,16 @@ class AuthFlowIT extends BaseIT {
     private String sha256(String value) throws Exception {
         return HexFormat.of().formatHex(
                 MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8)));
+    }
+    @org.junit.jupiter.api.Test
+    void fixedVerificationCodeIsDisabledByDefault() throws Exception {
+        var admin=onboard("Verification off");
+        long employee=createEmployee(admin,"Setup","Demo",uniqueEmail("setup"),java.math.BigDecimal.ZERO,null,null).path("id").asLong();
+        String email=uniqueEmail("restricted");
+        var created=apiPost(admin,"/api/users",java.util.Map.of("email",email,"role","EMPLOYEE","employeeId",employee));
+        var pending=loginAs(email,created.path("temporaryPassword").asText());
+        assertEquals(503,statusOf(pending,"POST","/api/auth/welcome/request-code",java.util.Map.of()));
+        assertEquals(503,statusOf(pending,"POST","/api/auth/welcome/verify-code",java.util.Map.of("code","123456")));
+        assertEquals(403,statusOf(pending,"GET","/api/hr/home",null));
     }
 }

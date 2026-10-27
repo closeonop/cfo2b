@@ -30,7 +30,7 @@ public class CompanyController {
     private final AuditService audit;
 
     public record SettingsDto(
-            @NotBlank String name,
+            @NotBlank @jakarta.validation.constraints.Size(max=255) String name,
             @NotBlank String currency,
             @NotBlank String locale,
             @NotBlank String salaryPeriod,
@@ -55,7 +55,7 @@ public class CompanyController {
     @PutMapping
     @PreAuthorize("hasAnyRole('ADMIN','CFO')")
     @Transactional
-    public Map<String, Object> update(@RequestBody SettingsDto dto) {
+    public Map<String, Object> update(@jakarta.validation.Valid @RequestBody SettingsDto dto) {
         AuthPrincipal p = SecurityUtils.current();
         Company c = companyRepo.findById(p.companyId())
                 .orElseThrow(() -> new ApiException("Company not found.", 404));
@@ -79,12 +79,16 @@ public class CompanyController {
     @GetMapping("/permissions")
     public List<Map<String, Object>> permissions() {
         return List.of(
-                Map.of("area", "Company settings & policies", "ADMIN", true, "CFO", true, "HR", false, "MANAGER", false, "EMPLOYEE", false),
+                Map.of("area", "Company settings", "ADMIN", true, "CFO", true, "HR", false, "MANAGER", false, "EMPLOYEE", false),
                 Map.of("area", "Salaries, tiers & raises", "ADMIN", true, "CFO", true, "HR", false, "MANAGER", false, "EMPLOYEE", false),
                 Map.of("area", "Propose a raise", "ADMIN", true, "CFO", true, "HR", true, "MANAGER", false, "EMPLOYEE", false),
                 Map.of("area", "Employee profiles", "ADMIN", true, "CFO", true, "HR", true, "MANAGER", "Own team", "EMPLOYEE", "Own"),
                 Map.of("area", "Salary visibility", "ADMIN", true, "CFO", true, "HR", "If enabled", "MANAGER", false, "EMPLOYEE", "Own only"),
-                Map.of("area", "Audit log", "ADMIN", true, "CFO", false, "HR", false, "MANAGER", false, "EMPLOYEE", false),
-                Map.of("area", "Import & export employees", "ADMIN", true, "CFO", true, "HR", false, "MANAGER", false, "EMPLOYEE", false));
+                Map.of("area", "Audit log", "ADMIN", true, "CFO", false, "HR", true, "MANAGER", false, "EMPLOYEE", false),
+                Map.of("area", "Import & export employees", "ADMIN", true, "CFO", true, "HR", true, "MANAGER", false, "EMPLOYEE", false),
+                Map.of("area", "Accounts & credentials", "ADMIN", true, "CFO", true, "HR", false, "MANAGER", false, "EMPLOYEE", false),
+                Map.of("area", "Personnel files", "ADMIN", true, "CFO", false, "HR", true, "MANAGER", "Direct reports", "EMPLOYEE", false),
+                Map.of("area", "HR requests & timesheets", "ADMIN", true, "CFO", "Own (if linked)", "HR", true, "MANAGER", "Own & direct reports", "EMPLOYEE", "Own"),
+                Map.of("area", "Hiring", "ADMIN", true, "CFO", false, "HR", true, "MANAGER", false, "EMPLOYEE", false));
     }
 }

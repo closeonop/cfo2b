@@ -25,6 +25,9 @@ public class CompensationService {
         BigDecimal oneTime = BigDecimal.ZERO;
         for (VariableComponent c : components) {
             if (!c.isActive()) continue;
+            var today = java.time.LocalDate.now();
+            if (c.getStartDate() != null && c.getStartDate().isAfter(today)
+                    || c.getEndDate() != null && c.getEndDate().isBefore(today)) continue;
             if (VariableComponent.ONE_TIME.equals(c.getPeriod())) {
                 oneTime = oneTime.add(c.getValue());
                 continue;
