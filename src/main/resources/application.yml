@@ -45,6 +45,9 @@ management:
   endpoint:
     health:
       show-details: never
+  health:
+    mail:
+      enabled: ${MAIL_ENABLED:false}
 
 app:
   # Local simulation only. A fixed code never proves ownership of an email address.
